@@ -5,7 +5,7 @@ import pymysql
 import io
 
 # Configure the path to Tesseract
-pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'  # Adjust this path for your OS and installation
+pytesseract.pytesseract.tesseract_cmd = 'D:\\Program Files\\Tesseract-OCR\\tesseract.exe'  # Adjust this path for your OS and installation
 
 app = Flask(__name__)
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
