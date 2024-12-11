@@ -24,6 +24,7 @@ except Exception as e:
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+def preprocess_image(image_stream):
     # Open the image
     img = Image.open(image_stream)
     
