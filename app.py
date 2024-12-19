@@ -31,25 +31,45 @@ def preprocess_image(image_stream):
     # Convert to grayscale
     gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
     
-    # Apply thresholding (Binarization)
-    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+    # Apply Gaussian blur to reduce noise
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     
-    # Optionally apply additional denoising if needed
-    # thresh = cv2.fastNlMeansDenoising(thresh, None, 30, 7, 21)
+    # Apply adaptive thresholding for dynamic binarization
+    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     
-    # Convert back to PIL image
+    # Convert back to PIL Image for further processing
     img = Image.fromarray(thresh)
 
-    # Optionally enhance sharpness/contrast
+    # Enhance contrast
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(2)  # Increase contrast
-    
+    img = enhancer.enhance(2.0)  # Increase contrast by a factor of 2
+
+    # Enhance sharpness
+    sharpness_enhancer = ImageEnhance.Sharpness(img)
+    img = sharpness_enhancer.enhance(2.0)  # Increase sharpness by a factor of 2
+
     return img
 
 def clean_text(text):
     # Remove unwanted line breaks between numbers and currency symbols
     text = re.sub(r'(\$\d+)\s+(\d+)', r'\1\2', text)  # Fix "$4" and "00" split into "$4.00"
     return text
+
+def crop_image(image, left, top, right, bottom):
+    """
+    Crops the image to the specified region.
+
+    Parameters:
+        image (PIL.Image): The image to crop.
+        left (int): The left boundary (x-coordinate).
+        top (int): The top boundary (y-coordinate).
+        right (int): The right boundary (x-coordinate).
+        bottom (int): The bottom boundary (y-coordinate).
+
+    Returns:
+        PIL.Image: The cropped image.
+    """
+    return image.crop((left, top, right, bottom))
 
 @app.route('/')
 def index():
@@ -76,15 +96,26 @@ def upload_file():
         # Read the file into memory
         image_stream = io.BytesIO(file.read())
 
-        # Preprocess the image for better OCR accuracy
-        image = preprocess_image(image_stream)
+        # Open the image using PIL
+        image = Image.open(image_stream)
+
+        # Define the cropping region (adjust these values based on your needs)
+        crop_region = (50, 100, 500, 550)  # Example coordinates (left, top, right, bottom)
+        cropped_image = crop_image(image, *crop_region)
+
+        # Preprocess the cropped image for better OCR accuracy
+        image_buffer = io.BytesIO()
+        cropped_image.save(image_buffer, format='PNG')  # Use 'JPEG' if appropriate
+        image_buffer.seek(0)  # Reset the buffer's position to the beginning
+        processed_image = preprocess_image(image_buffer)
+
 
         # Extract text using OCR
         custom_oem_psm_config = r'--oem 3 --psm 6'  # LSTM OCR engine, assume a uniform block of text
-        extracted_text = pytesseract.image_to_string(image, config=custom_oem_psm_config)
+        extracted_text = pytesseract.image_to_string(processed_image, config=custom_oem_psm_config, lang='eng')
         print(f"✅ Extracted text: {extracted_text}")
 
-        # Clean up the extracted text (e.g., fix price splits)
+        # Clean up the extracted text
         cleaned_text = clean_text(extracted_text)
 
         # Save extracted text to the database
@@ -93,33 +124,6 @@ def upload_file():
             cursor.execute(sql, (file.filename, cleaned_text))
             db.commit()
             print("✅ Data inserted into the database successfully")
-
-            # Process the cleaned text to extract items and prices
-            # Here, you should implement a more sophisticated parsing method based on your receipt structure
-            # For simplicity, let's assume we just extract some items from the text
-            items = []
-            for line in cleaned_text.split("\n"):
-                # Example: simple parsing of lines containing '$' symbol (you may need more advanced parsing)
-                if '$' in line:
-                    # Parse item name, price, and quantity (this is a very basic example)
-                    parts = line.split('$')
-                    if len(parts) > 1:
-                        item_name = parts[0].strip()
-                        price = parts[1].strip().replace(",", "")
-                        quantity = 1  # Default quantity for now, you can adjust this logic as needed
-                        items.append((item_name, price, quantity))
-            
-            # Insert parsed items into the database
-            for item in items:
-                item_name, price, quantity = item
-                try:
-                    item_sql = "INSERT INTO items (item_name, price, quantity, purchase_date) VALUES (%s, %s, %s, CURDATE())"
-                    cursor.execute(item_sql, (item_name, price, quantity))
-                    db.commit()
-                    print(f"✅ Item '{item_name}' added to the items table.")
-                except Exception as e:
-                    db.rollback()
-                    print(f"❌ Error inserting item '{item_name}': {e}")
 
             return jsonify({'success': True, 'message': 'File processed successfully', 'extracted_text': cleaned_text})
 
