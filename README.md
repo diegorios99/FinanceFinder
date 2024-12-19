@@ -224,6 +224,7 @@ Ensure your phone and computer are on the **same Wi-Fi network**, then open:
 - Tesseract Not Found: Verify the Tesseract installation path in app.py.
 - Database Connection Issues: Confirm MySQL is running and credentials are correct in app.py.
 - Firewall Issues: Ensure your firewall allows incoming connections on port 5000.
+- MySQL root credentials may be incorrect, verify that you are using the appropriate password.
 
 ### Future Improvements
 - Add user authentication for secure access.
